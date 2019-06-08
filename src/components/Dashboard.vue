@@ -23,6 +23,7 @@
                   </v-list-tile-action>
                   <v-list-tile-content>
                     <v-list-tile-title :style="{color: powerAmountColor}">{{ powerAmount }} kW</v-list-tile-title>
+                    <span v-if="syncData.charging" class="font-weight-light font-italic">{{ rangePerHour }} km / h</span>
                   </v-list-tile-content>
                 </v-list-tile>
                 <v-list-tile v-if="isSupportedCar()">
@@ -39,7 +40,7 @@
                     <v-icon color="teal">schedule</v-icon>
                   </v-list-tile-action>
                   <v-list-tile-content>
-                    <v-list-tile-title>{{ chargingTimeLeft }} h</v-list-tile-title>
+                    <v-list-tile-title>{{ chargingTimeLeft }} h ({{ finishTime }})</v-list-tile-title>
                   </v-list-tile-content>
                 </v-list-tile>
               </v-list>
@@ -139,6 +140,7 @@
 <script>
   import storage from '../utils/storage';
   import cars from '../utils/cars';
+  import general from '../utils/general';
 
   export default {
     data: () => ({
@@ -180,16 +182,10 @@
         return 'red';
       },
       chargingTimeLeft() {
-        const capacity = cars[this.settings.car].CAPACITY;
-        const soc = this.syncData.soc_display || this.syncData.soc_bms;
-        const amountToCharge = capacity - parseFloat(
-          capacity * ((soc === 100) ? 1 : '0.' + ((soc < 10) ? ('0' + parseInt(soc)) : parseInt(soc)))
-        ).toFixed(2) || 0;
-        const decimalTime = parseFloat(
-          amountToCharge / (Math.abs(this.syncData.dc_battery_power) || cars[this.settings.car].FAST_SPEED)
-        ).toFixed(2);
-        const duration = this.$root.MomentJS.duration(parseFloat(decimalTime)).asMilliseconds();
-        return this.$root.MomentJS().startOf('day').add(duration, 'minutes').format('m:ss');
+        return general.chargeTime(this.settings.car, this.syncData.soc_display, this.syncData.soc_bms, this.syncData.dc_battery_power, "timeleft");
+      },
+      finishTime() {
+        return general.chargeTime(this.settings.car, this.syncData.soc_display, this.syncData.soc_bms, this.syncData.dc_battery_power, "finishtime");
       },
       currentRange() {
         const soc = this.syncData.soc_display || this.syncData.soc_bms;
@@ -205,6 +201,10 @@
       },
       totalRange() {
         return parseInt((cars[this.settings.car].CAPACITY / this.settings.consumption) * 100) || 0;
+      },
+      rangePerHour() {
+        const time = general.chargeDecimalTime(this.settings.car, this.syncData.soc_display, this.syncData.soc_bms, this.syncData.dc_battery_power);
+        return parseInt(((this.totalRange - this.currentRange) / (60 / 100 * time * 100)) * 60) || 0;
       }
     },
     methods: {
